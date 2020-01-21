@@ -1,0 +1,4 @@
+all: dump_cpuid.exe
+
+dump_cpuid.exe: dump_cpuid.cc
+	cl dump_cpuid.cc
