@@ -2,3 +2,6 @@ all: dump_cpuid.exe
 
 dump_cpuid.exe: dump_cpuid.cc
 	cl dump_cpuid.cc
+
+clean:
+	del *.exe *.obj *.o dump_cpuid
