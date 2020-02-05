@@ -563,10 +563,11 @@ void basic_leaves()
 	printf("Not Supported XSAVE States =%s\n", nsup);
 	printf("Max Size Required for Enabled Features = %d\n", r.ebx);
 	printf("Max Size Required for All Features = %d\n", r.ecx);
-	//printf("...", r.edx);
+	printf("Upper 32bit XCR0 support bits = %08X\n", r.edx);
+	uint64_t leaf_0d_bitmap = r.eax | ((uint64_t)r.edx << 32);
 
 	cpuid(&r, 0xd, 1);
-	printf("XSAVEOPT is available = %s\n", yesno(r.eax & (1 >> 0)));
+	printf("XSAVEOPT is available = %s\n", yesno(r.eax & (1 << 0)));
 	*sup = *nsup = '\0';
 	SUP(r.eax,  1, "XSAVEC");
 	SUP(r.eax,  2, "XGETBV_with_ECX1");
@@ -575,13 +576,23 @@ void basic_leaves()
 	printf("Not Supported =%s\n", nsup);
 	printf("Size for XSAVE States with IA32_XSS = %d\n", r.ebx);
 	*sup = *nsup = '\0';
-	SUP(r.eax,  8, "PT");
-	SUP(r.eax, 13, "HWP");
+	SUP(r.ecx,  8, "PT");
+	SUP(r.ecx, 13, "HWP");
 	printf("Supported IA32_XSS States     =%s\n", sup);
 	printf("Not Supported IA32_XSS States =%s\n", nsup);
-	//printf("...", r.edx);
+	printf("Upper 32bit IA32_XSS support bits = %08X\n", r.edx);
+	leaf_0d_bitmap |= r.ecx | ((uint64_t)r.edx << 32);
 
-	//cpuid(&r, 0xd, 2);
+	for (uint32_t subleaf = 2; subleaf < 64; ++subleaf) {
+		if (!(leaf_0d_bitmap & (1ULL << subleaf)))
+			continue;
+		cpuid(&r, 0xd, subleaf);
+		printf("Size of State #%d = %d\n", subleaf % 32, r.eax);
+		if (!(r.ecx & (1 << 0)))
+			printf("Offset of State #%d = %d\n", subleaf % 32, r.ebx);
+		printf("State #%d is Supported by = %s\n", subleaf % 32, (r.ecx & (1 << 0)) ? "IA32_XSS" : "XCR0");
+		printf("XSAVE Extended State Padding for State #%d = %s\n", subleaf % 32, yesno(r.ecx & (1 << 1)));
+	}
 
 	if (maxleaf < 0xf)
 		return;
