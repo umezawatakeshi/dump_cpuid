@@ -616,8 +616,40 @@ void basic_leaves()
 		printf("Not Supported L3 Monitoring =%s\n", nsup);
 	}
 
-	/*
+	if (maxleaf < 0x10)
+		return;
 	cpuid(&r, 0x10, 0);
+	*sup = *nsup = '\0';
+	SUP(r.ebx,  1, "L2_Cache");
+	SUP(r.ebx,  2, "L3_Cache");
+	SUP(r.ebx,  3, "Memory_Bandwidth");
+	printf("Supported Resource Allocation     =%s\n", sup);
+	printf("Not Supported Resource Allocation =%s\n", nsup);
+	auto leaf_10_bitmap = r.ebx;
+
+	if (leaf_0f_bitmap & (1 << 1)) {
+		cpuid(&r, 0x10, 1);
+		printf("Length of Capacity Bit Mask = %d\n", (r.eax & 0x1f) + 1);
+		printf("Bitmap of Isolation/Contention = %08XH\n", r.ebx);
+		printf("Code/Data Prioritization Technology Support = %s\n", yesno(r.ecx & (1 << 2)));
+		printf("Highest COS number = %d\n", r.edx & 0xffff);
+	}
+
+	if (leaf_0f_bitmap & (1 << 2)) {
+		cpuid(&r, 0x10, 2);
+		printf("Length of Capacity Bit Mask = %d\n", (r.eax & 0x1f) + 1);
+		printf("Bitmap of Isolation/Contention = %08XH\n", r.ebx);
+		printf("Highest COS number = %d\n", r.edx & 0xffff);
+	}
+
+	if (leaf_0f_bitmap & (1 << 3)) {
+		cpuid(&r, 0x10, 3);
+		printf("Max MBA Throttling Value = %d\n", (r.eax & 0xfff) + 1);
+		printf("Response of the Delay Values is Linear = %s\n", yesno(r.ecx & (1 << 2)));
+		printf("Highest COS number = %d\n", r.edx & 0xffff);
+	}
+
+	/*
 	cpuid(&r, 0x12, 0);
 	cpuid(&r, 0x14, 0);
 	cpuid(&r, 0x15);
