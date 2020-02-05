@@ -683,7 +683,7 @@ void basic_leaves()
 	};
 	cpuid(&r, 0x18, 0);
 	auto max_18_subleaf = r.eax;
-	for (uint32_t subleaf = 0; subleaf <= r.eax; ++subleaf) {
+	for (uint32_t subleaf = 0; subleaf <= max_18_subleaf; ++subleaf) {
 		if (subleaf != 0)
 			cpuid(&r, 0x18, subleaf);
 		auto level = (r.edx >> 5) & 0x7;
