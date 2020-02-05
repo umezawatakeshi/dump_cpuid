@@ -652,8 +652,24 @@ void basic_leaves()
 	/*
 	cpuid(&r, 0x12, 0);
 	cpuid(&r, 0x14, 0);
+	*/
+
+	if (maxleaf < 0x15)
+		return;
 	cpuid(&r, 0x15);
+	if (r.ebx != 0)
+		printf("TSC/CoreCrystalClock ratio = %d/%d = %f\n", r.ebx, r.eax, (double)r.ebx / (double)r.eax);
+	if (r.ecx != 0)
+		printf("Core Crystal Clock = %dHz\n", r.ecx);
+
+	if (maxleaf < 0x16)
+		return;
 	cpuid(&r, 0x16);
+	printf("Processor Base Freq = %dMHz\n", r.eax & 0xffff);
+	printf("Processor Max Freq = %dMHz\n", r.ebx & 0xffff);
+	printf("Bus Freq = %dMHz\n", r.ecx & 0xffff);
+
+	/*
 	cpuid(&r, 0x17, 0);
 	cpuid(&r, 0x18, 0);
 	cpuid(&r, 0x1a, 0);
