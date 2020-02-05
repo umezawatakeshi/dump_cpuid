@@ -671,7 +671,47 @@ void basic_leaves()
 
 	/*
 	cpuid(&r, 0x17, 0);
+	*/
+
+	if (maxleaf < 0x18)
+		return;
+	static const char* const tlbtype_list[4] = {
+		"(null)",
+		"Data",
+		"Instruction",
+		"Unified",
+	};
 	cpuid(&r, 0x18, 0);
+	auto max_18_subleaf = r.eax;
+	for (uint32_t subleaf = 0; subleaf <= r.eax; ++subleaf) {
+		if (subleaf != 0)
+			cpuid(&r, 0x18, subleaf);
+		auto level = (r.edx >> 5) & 0x7;
+		auto tlbtype = r.edx & 0x1f;
+		if (tlbtype == 0)
+			continue;
+		auto tlbtype_str = tlbtype < 4 ? tlbtype_list[tlbtype] : "(reserved)";
+		printf("TLB Type = L%d %s\n", level, tlbtype_str);
+		*sup = *nsup = '\0';
+		SUP(r.ebx,  0, "4KB");
+		SUP(r.ebx,  1, "2MB");
+		SUP(r.ebx,  2, "4MB");
+		SUP(r.ebx,  3, "1GB");
+		printf("Supported Page Size =%s\n", sup);
+		printf("Partitioning = %d\n", (r.ebx >> 8) & 0x7);
+		printf("Associativity = ");
+		auto ways = (r.ebx >> 16) & 0xffff;
+		auto sets = r.ecx;
+		if (r.edx & (1 << 8))
+			printf("Full Associative\n");
+		else if (ways == 1)
+			printf("Direct Mapped\n");
+		else
+			printf("%d-way Set Associative\n", ways);
+		printf("Max Number of Addressable IDs for Logical Processors Sharing This TLB = %d\n", ((r.eax >> 14) & 0x3ff) + 1);
+	}
+
+	/*
 	cpuid(&r, 0x1a, 0);
 	*/
 
