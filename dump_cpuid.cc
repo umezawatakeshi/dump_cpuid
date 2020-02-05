@@ -3,16 +3,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <unordered_map>
+
 #if defined(_MSC_VER)
 #include <intrin.h>
 #endif
 
-struct cpuid_result
+union cpuid_result
 {
-	uint32_t eax;
-	uint32_t ebx;
-	uint32_t ecx;
-	uint32_t edx;
+	struct {
+		uint32_t eax;
+		uint32_t ebx;
+		uint32_t ecx;
+		uint32_t edx;
+	};
+	uint32_t exx[4];
 };
 
 struct xgetbv_result
@@ -110,6 +115,7 @@ void basic_leaves()
 	unsigned model = (r.eax >> 4) & 0xf;
 	if (family == 0x6 || family == 0xf)
 		model += ((r.eax >> 16) & 0xf) << 4;
+	bool is_xeon_mp = (family == 0x0f && model == 0x06); // used in Leaf 02H
 	printf("Display Family ID = %02X\n", family);
 	printf("Display Model ID = %02X\n", model);
 	printf("Brand Index = %d\n", r.ebx & 0xff);
@@ -182,7 +188,150 @@ void basic_leaves()
 	if (maxleaf < 0x2)
 		return;
 	cpuid(&r, 0x2);
-	// TODO: implement
+	r.eax &= 0xffffff00;
+	static const std::unordered_map<uint8_t, const char*> tlbinfo_list = {
+		{ 0x01, "ITLB:         4KB pages, 4-way,   32 entries" },
+		{ 0x02, "ITLB:         4MB pages, full,     2 entries" },
+		{ 0x03, "DTLB:         4KB pages, 4-way,   64 entries" },
+		{ 0x04, "DTLB:         4MB pages, 4-way,    8 entries" },
+		{ 0x05, "DTLB:         4MB pages, 4-way,   32 entries" },
+		{ 0x0b, "ITLB:         4MB pages, 4-way,    4 entries" },
+		{ 0x4f, "ITLB:         4KB pages,          32 entries" },
+		{ 0x50, "ITLB: 4KB/2MB/4MB pages,          64 entries" },
+		{ 0x51, "ITLB: 4KB/2MB/4MB pages,         128 entries" },
+		{ 0x52, "ITLB: 4KB/2MB/4MB pages,         256 entries" },
+		{ 0x55, "ITLB:     2MB/4MB pages, full,     7 entries" },
+		{ 0x56, "DTLB:         4MB pages, 4-way,   16 entries" },
+		{ 0x57, "DTLB:         4KB pages, 4-way,   16 entries" },
+		{ 0x59, "DTLB:         4KB pages, full,    16 entries" },
+		{ 0x5a, "DTLB:     2MB/4MB pages, 4-way,   32 entries" },
+		{ 0x5b, "DTLB:     4KB/4MB pages,          64 entries" },
+		{ 0x5c, "DTLB:     4KB/4MB pages,         128 entries" },
+		{ 0x5d, "DTLB:     4KB/4MB pages,         256 entries" },
+		{ 0x61, "ITLB:         4KB pages, full,    48 entries" },
+		{ 0x63, "DTLB:     2MB/4MB pages, 4-way,   32 entries\n"
+		  "               also 1GB pages, 4-way,    4 entries" },
+		{ 0x64, "DTLB:         4KB pages, 4-way,  512 entries" },
+		{ 0x6a, "uTLB:         4KB pages, 8-way,   64 entries" },
+		{ 0x6b, "DTLB:         4KB pages, 8-way,  256 entries" },
+		{ 0x6c, "DTLB:     2MB/4MB pages, 8-way,  128 entries" },
+		{ 0x6d, "DTLB:         1GB pages, full,    16 entries" },
+		{ 0x76, "ITLB:     2MB/4MB pages, full,     8 entries" },
+		{ 0xa0, "DTLB:         4KB pages, full,    32 entries" },
+		{ 0xb0, "ITLB:         4KB pages, 4-way,  128 entries" },
+		{ 0xb1, "ITLB:         2MB pages, 4-way,    8 entries\n"
+		  "                 or 4MB pages, 4-way,    4 entries" },
+		{ 0xb2, "ITLB:         4KB pages, 4-way,   64 entries" },
+		{ 0xb3, "DTLB:         4KB pages, 4-way,  128 entries" },
+		{ 0xb4, "DTLB:         4KB pages, 4-way,  256 entries" },
+		{ 0xb5, "ITLB:         4KB pages, 8-way,   64 entries" },
+		{ 0xb6, "ITLB:         4KB pages, 8-way,  128 entries" },
+		{ 0xba, "DTLB:         4KB pages, 4-way,   64 entries" },
+		{ 0xc0, "DTLB:     4KB/4MB pages, 4-way,    8 entries" },
+		{ 0xc1, "STLB:     4KB/2MB pages, 8-way, 1024 entries" },
+		{ 0xc2, "DTLB:     4KB/2MB pages, 4-way,   16 entries" },
+		{ 0xc3, "STLB:     4KB/2MB pages, 6-way, 1536 entries\n"
+		  "               also 1GB pages, 4-way,   16 entries" },
+		{ 0xc4, "DTLB:     2MB/4MB pages, 4-way,   32 entries" },
+		{ 0xca, "STLB:         4KB pages, 4-way,  512 entries" },
+
+		{ 0x06, "L1I$:   8KB,  4-way, 32 byte line" },
+		{ 0x08, "L1I$:  16KB,  4-way, 32 byte line" },
+		{ 0x09, "L1I$:  32KB,  4-way, 64 byte line" },
+		{ 0x0a, "L1D$:   8KB,  2-way, 32 byte line" },
+		{ 0x0c, "L1D$:  16KB,  4-way, 32 byte line" },
+		{ 0x0d, "L1D$:  16KB,  4-way, 64 byte line" },
+		{ 0x0e, "L1D$:  24KB,  6-way, 64 byte line" },
+		{ 0x1d, "L2$ : 128KB,  2-way, 64 byte line" },
+		{ 0x21, "L2$ : 256KB,  8-way, 64 byte line" },
+		{ 0x22, "L3$ : 512KB,  4-way, 64 byte line, 2 lines/sector" },
+		{ 0x23, "L3$ :   1MB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x24, "L2$ :   1MB, 16-way, 64 byte line" },
+		{ 0x25, "L3$ :   2MB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x29, "L3$ :   4MB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x2c, "L1D$:  32KB,  8-way, 64 byte line" },
+		{ 0x30, "L1I$:  32KB,  8-way, 64 byte line" },
+		{ 0x41, "L2$ : 128KB,  4-way, 32 byte line" },
+		{ 0x42, "L2$ : 256KB,  4-way, 32 byte line" },
+		{ 0x43, "L2$ : 512KB,  4-way, 32 byte line" },
+		{ 0x44, "L2$ :   1MB,  4-way, 32 byte line" },
+		{ 0x45, "L2$ :   2MB,  4-way, 32 byte line" },
+		{ 0x46, "L3$ :   4MB,  4-way, 64 byte line" },
+		{ 0x47, "L3$ :   8MB,  8-way, 64 byte line" },
+		{ 0x48, "L2$ :   3MB, 12-way, 64 byte line" },
+//		{ 0x49, "L3$ :   4MB, 16-way, 64 byte line  or  L2$ :   4MB, 16-way, 64 byte line" }, // needs special care: see below
+		{ 0x4a, "L3$ :   6MB, 12-way, 64 byte line" },
+		{ 0x4b, "L3$ :   8MB, 16-way, 64 byte line" },
+		{ 0x4c, "L3$ :  12MB, 12-way, 64 byte line" },
+		{ 0x4d, "L3$ :  16MB, 16-way, 64 byte line" },
+		{ 0x4e, "L2$ :   6MB, 24-way, 64 byte line" },
+		{ 0x60, "L1D$:  16KB,  8-way, 64 byte line" },
+		{ 0x66, "L1D$:   8KB,  4-way, 64 byte line" },
+		{ 0x67, "L1D$:  16KB,  4-way, 64 byte line" },
+		{ 0x68, "L1D$:  32KB,  4-way, 64 byte line" },
+		{ 0x78, "L2$ :   1MB,  4-way, 64 byte line" },
+		{ 0x79, "L2$ : 128KB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x7a, "L2$ : 256KB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x7b, "L2$ : 512KB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x7c, "L2$ :   1MB,  8-way, 64 byte line, 2 lines/sector" },
+		{ 0x7d, "L2$ :   2MB,  8-way, 64 byte line" },
+		{ 0x7f, "L2$ : 512KB,  2-way, 64 byte line" },
+		{ 0x80, "L2$ : 512KB,  8-way, 64 byte line" },
+		{ 0x82, "L2$ : 256KB,  8-way, 32 byte line" },
+		{ 0x83, "L2$ : 512KB,  8-way, 32 byte line" },
+		{ 0x84, "L2$ :   1MB,  8-way, 32 byte line" },
+		{ 0x85, "L2$ :   2MB,  8-way, 32 byte line" },
+		{ 0x86, "L2$ : 512KB,  4-way, 64 byte line" },
+		{ 0x87, "L2$ :   1MB,  8-way, 64 byte line" },
+		{ 0xd0, "L3$ : 512KB,  4-way, 64 byte line" },
+		{ 0xd1, "L3$ :   1MB,  4-way, 64 byte line" },
+		{ 0xd2, "L3$ :   2MB,  4-way, 64 byte line" },
+		{ 0xd6, "L3$ :   1MB,  8-way, 64 byte line" },
+		{ 0xd7, "L3$ :   2MB,  8-way, 64 byte line" },
+		{ 0xd8, "L3$ :   4MB,  8-way, 64 byte line" },
+		{ 0xdc, "L3$ : 1.5MB, 12-way, 64 byte line" },
+		{ 0xdd, "L3$ :   3MB, 12-way, 64 byte line" },
+		{ 0xde, "L3$ :   6MB, 12-way, 64 byte line" },
+		{ 0xe2, "L3$ :   2MB, 16-way, 64 byte line" },
+		{ 0xe3, "L3$ :   4MB, 16-way, 64 byte line" },
+		{ 0xe4, "L3$ :   8MB, 16-way, 64 byte line" },
+		{ 0xea, "L3$ :  12MB, 24-way, 64 byte line" },
+		{ 0xeb, "L3$ :  18MB, 24-way, 64 byte line" },
+		{ 0xec, "L3$ :  24MB, 24-way, 64 byte line" },
+
+		{ 0x70, "T$  : 12Kuop, 8-way" },
+		{ 0x71, "T$  : 16Kuop, 8-way" },
+		{ 0x72, "T$  : 32Kuop, 8-way" },
+
+		{ 0x40, "No L2$ or L3$" },
+
+		{ 0xf0, "Prefetch:  64 byte" },
+		{ 0xf1, "Prefetch: 128 byte" },
+
+		{ 0xfe, "See Leaf 18H for TLB Info" },
+		{ 0xff, "See Leaf 04H for Cache Info" },
+	};
+	for (int i = 0; i < 4; ++i) {
+		if (r.exx[i] & 0x80000000)
+			continue;
+		for (int j = 0; j < 4; ++j) {
+			uint8_t desc = r.exx[i] >> (j * 8);
+			if (desc == 0x00)
+				continue;
+			if (desc == 0x49) {
+				if (is_xeon_mp)
+					printf("%02XH = L3$ :   4MB, 16-way, 64 byte line\n", desc);
+				else
+					printf("%02XH = L2$ :   4MB, 16-way, 64 byte line\n", desc);
+				continue;
+			}
+			auto it = tlbinfo_list.find(desc);
+			if (it == tlbinfo_list.end())
+				printf("%02XH = (reserved)\n", desc);
+			else
+				printf("%02XH = %s\n", desc, it->second);
+		}
+	}
 
 	if (maxleaf < 0x3)
 		return;
